@@ -154,10 +154,9 @@ vcpkg install tomlkit11 --overlay-ports=/path/to/tomlkit11/packaging/vcpkg
 
    > **注**：`vcpkg` 与 `cmake --install` 产物有意保持纯 Header-Only（`tomlkit11::tomlkit11`），因为预编译 `.lib` 与不同 C++ 标准（如 C++14 编库 + C++17/20/23 消费端切换 `std::string_view` / `std::optional` / `std::filesystem::path`）混用会产生 ABI 符号不匹配，且 MSBuild `.sln` 工程不会自动传播 CMake 目标宏。
 
-2. **非 CMake / 单头文件项目**：若需自行加速多文件编译，可在全局定义 `TOMLKIT11_COMPILED_LIB`，并在工程内任意一个 `.cpp` 中补充：
+2. **`vcpkg` 安装引入 / VS `.sln`（`.vcxproj`）/ 单头文件项目**：在工程属性（「预处理器定义 / Preprocessor Definitions」或编译选项）中全局添加 `TOMLKIT11_COMPILED_LIB`，并在工程内任意一个 `.cpp`（例如现有的 `main.cpp`、`pch.cpp` 或单独新建的 `.cpp`）顶部加入：
 
    ```cpp
-   #define TOMLKIT11_COMPILED_LIB
    #define TOMLKIT11_IMPLEMENTATION
    #include <tomlkit11/tomlkit11.hpp>
    ```

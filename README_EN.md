@@ -154,10 +154,9 @@ vcpkg install tomlkit11 --overlay-ports=/path/to/tomlkit11/packaging/vcpkg
 
    > **Note**: Installed packages (`vcpkg` and `cmake --install`) intentionally remain pure header-only (`tomlkit11::tomlkit11`). Precompiling a binary `.lib` under one C++ standard (e.g. C++14) would mismatch symbol mangling for consumers built under another standard (where `tomlkit::StringView`, `tomlkit::Optional`, and `std::filesystem::path` signatures adapt), and MSBuild `.sln` projects integrated via vcpkg do not automatically propagate CMake target compile definitions.
 
-2. **Non-CMake / single-header builds**: Define `TOMLKIT11_COMPILED_LIB` project-wide and include the implementation once in a single `.cpp` file:
+2. **`vcpkg` / Visual Studio `.sln` (`.vcxproj`) / single-header builds**: Add `TOMLKIT11_COMPILED_LIB` to project-wide Preprocessor Definitions (or compiler flags), and in any single `.cpp` file in your project (e.g. `main.cpp`, `pch.cpp`, or a dedicated `.cpp`) place:
 
    ```cpp
-   #define TOMLKIT11_COMPILED_LIB
    #define TOMLKIT11_IMPLEMENTATION
    #include <tomlkit11/tomlkit11.hpp>
    ```

@@ -4,8 +4,7 @@ vcpkg_from_github(
     OUT_SOURCE_PATH SOURCE_PATH
     REPO julixian/tomlkit11
     REF "v${VERSION}"
-    # Replace SHA512 0 with the actual archive SHA512 hash once the release tag is created
-    SHA512 0
+    SHA512 0af94a297dec919e82b85d0e11bbbfe119daecb2a2f5991103b7ccbc91efe1e63ea670418078cff67a6314e2f130acfb4224b0a3780adbc63e67b5fef7cecd23
     HEAD_REF main
 )
 

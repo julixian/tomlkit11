@@ -1,0 +1,382 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  amalgamate-and-manifest:
+    name: amalgamate --check & packaging manifest
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+
+      - name: Verify single_include amalgamation is up to date
+        run: python3 scripts/amalgamate.py --check
+
+      - name: Validate packaging/vcpkg/vcpkg.json
+        run: python3 -m json.tool packaging/vcpkg/vcpkg.json > /dev/null
+
+  matrix:
+    name: ${{ matrix.name }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: ubuntu-gcc (C++11)
+            os: ubuntu-latest
+            cc: gcc
+            cxx: g++
+            cxx_std: '11'
+            flags: '-Wall -Wextra -Wpedantic'
+            test_single_include: true
+
+          - name: ubuntu-gcc (C++17)
+            os: ubuntu-latest
+            cc: gcc
+            cxx: g++
+            cxx_std: '17'
+            flags: '-Wall -Wextra -Wpedantic'
+            test_single_include: false
+
+          - name: ubuntu-gcc (C++23)
+            os: ubuntu-latest
+            cc: gcc
+            cxx: g++
+            cxx_std: '23'
+            flags: '-Wall -Wextra -Wpedantic'
+            test_single_include: true
+
+          - name: ubuntu-clang (C++11)
+            os: ubuntu-latest
+            cc: clang
+            cxx: clang++
+            cxx_std: '11'
+            flags: '-Wall -Wextra -Wpedantic'
+            test_single_include: true
+
+          - name: ubuntu-clang (C++17)
+            os: ubuntu-latest
+            cc: clang
+            cxx: clang++
+            cxx_std: '17'
+            flags: '-Wall -Wextra -Wpedantic'
+            test_single_include: false
+
+          - name: ubuntu-clang (C++23)
+            os: ubuntu-latest
+            cc: clang
+            cxx: clang++
+            cxx_std: '23'
+            flags: '-Wall -Wextra -Wpedantic'
+            test_single_include: true
+
+          - name: windows-msvc (default C++14, no /Zc:__cplusplus)
+            os: windows-latest
+            cc: cl
+            cxx: cl
+            cxx_std: ''
+            flags: '/EHsc /W4'
+            test_single_include: false
+
+          - name: windows-msvc (/std:c++20, no /Zc:__cplusplus)
+            os: windows-latest
+            cc: cl
+            cxx: cl
+            cxx_std: '20'
+            flags: '/EHsc /W4'
+            test_single_include: true
+
+          - name: windows-clang (C++17)
+            os: windows-latest
+            cc: clang
+            cxx: clang++
+            cxx_std: '17'
+            flags: '-Wall -Wextra -Wpedantic'
+            test_single_include: false
+
+          - name: windows-clang (C++23)
+            os: windows-latest
+            cc: clang
+            cxx: clang++
+            cxx_std: '23'
+            flags: '-Wall -Wextra -Wpedantic'
+            test_single_include: true
+
+          - name: macos-clang (C++11)
+            os: macos-15
+            cc: clang
+            cxx: clang++
+            cxx_std: '11'
+            flags: '-Wall -Wextra -Wpedantic'
+            test_single_include: true
+
+          - name: macos-clang (C++23)
+            os: macos-15
+            cc: clang
+            cxx: clang++
+            cxx_std: '23'
+            flags: '-Wall -Wextra -Wpedantic'
+            test_single_include: true
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Ninja on Ubuntu/macOS
+        if: runner.os != 'Windows'
+        shell: bash
+        run: |
+          if [[ "$RUNNER_OS" == "Linux" ]]; then
+            sudo apt-get update -qq
+            sudo apt-get install -y -qq ninja-build
+          elif [[ "$RUNNER_OS" == "macOS" ]]; then
+            command -v ninja >/dev/null 2>&1 || HOMEBREW_NO_AUTO_UPDATE=1 brew install ninja
+          fi
+
+      - name: Setup MSVC DevShell
+        if: runner.os == 'Windows'
+        uses: ilammy/msvc-dev-cmd@v1
+        with:
+          arch: x64
+
+      - name: Configure and build (multi-header)
+        shell: bash
+        env:
+          CC: ${{ matrix.cc }}
+          CXX: ${{ matrix.cxx }}
+          CXX_STD: ${{ matrix.cxx_std }}
+          EXTRA_FLAGS: ${{ matrix.flags }}
+        run: |
+          set -euo pipefail
+          if [[ "$RUNNER_OS" == "Windows" && -d "/c/Program Files/LLVM/bin" ]]; then
+            export PATH="/c/Program Files/LLVM/bin:$PATH"
+          fi
+          std_args=()
+          if [[ -n "$CXX_STD" ]]; then
+            std_args=(
+              "-DCMAKE_CXX_STANDARD=${CXX_STD}"
+              "-DCMAKE_CXX_STANDARD_REQUIRED=ON"
+              "-DCMAKE_CXX_EXTENSIONS=OFF"
+            )
+          fi
+          cmake -B build-multi -G Ninja \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_CXX_FLAGS="$EXTRA_FLAGS" \
+            "${std_args[@]}"
+          cmake --build build-multi
+
+      - name: Run unit tests (including -fno-exceptions and TOMLKIT11_COMPILED_LIB)
+        shell: bash
+        run: |
+          set -euo pipefail
+          ctest --test-dir build-multi --output-on-failure
+
+      - name: Fetch official toml-test suite
+        shell: bash
+        run: |
+          set -euo pipefail
+          git clone --quiet --depth 1 https://github.com/toml-lang/toml-test.git "$RUNNER_TEMP/toml-test"
+          if [[ "$RUNNER_OS" == "Windows" ]]; then
+            echo "TOML_TESTS_DIR=$(cygpath -m "$RUNNER_TEMP/toml-test/tests")" >> "$GITHUB_ENV"
+          else
+            echo "TOML_TESTS_DIR=$RUNNER_TEMP/toml-test/tests" >> "$GITHUB_ENV"
+          fi
+
+      - name: Run official TOML v1.1.0 & v1.0.0 compliance suite
+        shell: bash
+        run: |
+          set -euo pipefail
+          ./build-multi/tomlkit11-compliance-runner "$TOML_TESTS_DIR"
+
+      - name: Configure, build, and test (single_include)
+        if: matrix.test_single_include
+        shell: bash
+        env:
+          CC: ${{ matrix.cc }}
+          CXX: ${{ matrix.cxx }}
+          CXX_STD: ${{ matrix.cxx_std }}
+          EXTRA_FLAGS: ${{ matrix.flags }}
+        run: |
+          set -euo pipefail
+          if [[ "$RUNNER_OS" == "Windows" && -d "/c/Program Files/LLVM/bin" ]]; then
+            export PATH="/c/Program Files/LLVM/bin:$PATH"
+          fi
+          std_args=()
+          if [[ -n "$CXX_STD" ]]; then
+            std_args=(
+              "-DCMAKE_CXX_STANDARD=${CXX_STD}"
+              "-DCMAKE_CXX_STANDARD_REQUIRED=ON"
+              "-DCMAKE_CXX_EXTENSIONS=OFF"
+            )
+          fi
+          cmake -B build-single -G Ninja \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DTOMLKIT11_USE_SINGLE_INCLUDE=ON \
+            -DCMAKE_CXX_FLAGS="$EXTRA_FLAGS" \
+            "${std_args[@]}"
+          cmake --build build-single
+          ctest --test-dir build-single --output-on-failure
+
+  sanitizers:
+    name: ubuntu-clang (ASan + LSan + UBSan)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      ASAN_OPTIONS: halt_on_error=1:abort_on_error=1:detect_leaks=1
+      UBSAN_OPTIONS: print_stacktrace=1:halt_on_error=1
+    strategy:
+      fail-fast: false
+      matrix:
+        cxx_std: ['11', '23']
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Ninja
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq ninja-build
+
+      - name: Configure and build with ASan + UBSan (C++${{ matrix.cxx_std }})
+        env:
+          CC: clang
+          CXX: clang++
+        run: |
+          cmake -B build-san -G Ninja \
+            -DCMAKE_BUILD_TYPE=RelWithDebInfo \
+            -DCMAKE_CXX_STANDARD=${{ matrix.cxx_std }} \
+            -DCMAKE_CXX_STANDARD_REQUIRED=ON \
+            -DCMAKE_CXX_EXTENSIONS=OFF \
+            -DCMAKE_CXX_FLAGS="-fsanitize=address,undefined -fno-omit-frame-pointer -Wall -Wextra -Wpedantic"
+          cmake --build build-san
+
+      - name: Run unit tests under ASan + LSan + UBSan
+        run: ctest --test-dir build-san --output-on-failure
+
+      - name: Fetch and run official toml-test suite under ASan + LSan + UBSan
+        run: |
+          git clone --quiet --depth 1 https://github.com/toml-lang/toml-test.git "$RUNNER_TEMP/toml-test"
+          ./build-san/tomlkit11-compliance-runner "$RUNNER_TEMP/toml-test/tests"
+
+  install-and-consumer:
+    name: cmake --install & external find_package consumer (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            cxx_std: '11'
+          - os: windows-latest
+            cxx_std: ''
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Ninja on Ubuntu
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq ninja-build
+
+      - name: Setup MSVC DevShell
+        if: runner.os == 'Windows'
+        uses: ilammy/msvc-dev-cmd@v1
+        with:
+          arch: x64
+
+      - name: Install tomlkit11 to stage prefix
+        shell: bash
+        env:
+          CC: ${{ runner.os == 'Windows' && 'cl' || 'gcc' }}
+          CXX: ${{ runner.os == 'Windows' && 'cl' || 'g++' }}
+        run: |
+          set -euo pipefail
+          if [[ "$RUNNER_OS" == "Windows" ]]; then
+            stage_prefix="$(cygpath -m "$RUNNER_TEMP/stage")"
+          else
+            stage_prefix="$RUNNER_TEMP/stage"
+          fi
+          echo "STAGE_PREFIX=$stage_prefix" >> "$GITHUB_ENV"
+          cmake -B build-pkg -G Ninja \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DTOMLKIT11_BUILD_TESTS=OFF \
+            -DTOMLKIT11_BUILD_TOOLS=OFF
+          cmake --build build-pkg
+          cmake --install build-pkg --prefix "$stage_prefix"
+
+      - name: Build and run external find_package(tomlkit11 CONFIG REQUIRED) consumer
+        shell: bash
+        env:
+          CC: ${{ runner.os == 'Windows' && 'cl' || 'gcc' }}
+          CXX: ${{ runner.os == 'Windows' && 'cl' || 'g++' }}
+          CXX_STD: ${{ matrix.cxx_std }}
+        run: |
+          set -euo pipefail
+          if [[ "$RUNNER_OS" == "Windows" ]]; then
+            consumer_dir="$(cygpath -m "$RUNNER_TEMP/consumer")"
+          else
+            consumer_dir="$RUNNER_TEMP/consumer"
+          fi
+          mkdir -p "$consumer_dir"
+          cat > "$consumer_dir/CMakeLists.txt" <<'EOF'
+          cmake_minimum_required(VERSION 3.14)
+          project(tomlkit11_consumer LANGUAGES CXX)
+          find_package(tomlkit11 CONFIG REQUIRED)
+          add_executable(consumer main.cpp)
+          target_link_libraries(consumer PRIVATE tomlkit11::tomlkit11)
+          add_executable(consumer_compiled impl.cpp main.cpp)
+          target_compile_definitions(consumer_compiled PRIVATE TOMLKIT11_COMPILED_LIB)
+          target_link_libraries(consumer_compiled PRIVATE tomlkit11::tomlkit11)
+          EOF
+          cat > "$consumer_dir/impl.cpp" <<'EOF'
+          #define TOMLKIT11_IMPLEMENTATION
+          #include <tomlkit11/tomlkit11.hpp>
+          EOF
+          cat > "$consumer_dir/main.cpp" <<'EOF'
+          #include <tomlkit11/tomlkit11.hpp>
+          #include <string>
+
+          int main()
+          {
+              tomlkit::Item doc = tomlkit::parse("title = \"tomlkit11\"\n[server]\nport = 8080\n");
+              if (tomlkit::find<std::string>(doc, "title") != "tomlkit11") {
+                  return 1;
+              }
+              if (tomlkit::findOr(doc, "server", "port", 80) != 8080) {
+                  return 1;
+              }
+              doc.ensure("server", "host") = "127.0.0.1";
+              const std::string text = tomlkit::format(doc);
+              return text.find("host = \"127.0.0.1\"") != std::string::npos ? 0 : 1;
+          }
+          EOF
+          std_args=()
+          if [[ -n "$CXX_STD" ]]; then
+            std_args=(
+              "-DCMAKE_CXX_STANDARD=${CXX_STD}"
+              "-DCMAKE_CXX_STANDARD_REQUIRED=ON"
+              "-DCMAKE_CXX_EXTENSIONS=OFF"
+            )
+          fi
+          cmake -S "$consumer_dir" -B "$consumer_dir/build" -G Ninja \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_PREFIX_PATH="$STAGE_PREFIX" \
+            "${std_args[@]}"
+          cmake --build "$consumer_dir/build"
+          "$consumer_dir/build/consumer"
+          "$consumer_dir/build/consumer_compiled"

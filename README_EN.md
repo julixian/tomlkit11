@@ -2,31 +2,31 @@
 
 [简体中文](./README.md) | English
 
-> [!TIP]
-> **Using C++23? Check out our flagship C++23 Modules library: [tomlkitpp](https://github.com/julixian/tomlkitpp)**
+> [!NOTE]
+> **Using C++23? Check out the C++23 native module version: [tomlkitpp](https://github.com/julixian/tomlkitpp)**
 >
-> If your toolchain supports **C++23 native modules** (`export module tomlkitpp;` + `import std;`) and [`mcpp`](https://github.com/mcpp-community/mcpp), we strongly recommend **`tomlkitpp`**:
-> - **Zero header re-parsing overhead**: Eliminates repeated preprocessor parsing of large header-only libraries across translation units
+> If your project and toolchain support **C++23 native modules** (`export module tomlkitpp;` + `import std;`) and [`mcpp`](https://github.com/mcpp-community/mcpp), consider using **`tomlkitpp`**:
+> - **Native module compilation model**: Avoids repeated preprocessor parsing of headers across translation units via module BMIs, with no compiled-lib macro setup needed
 > - **Native C++23 ergonomics**: Native `std::expected`, out-of-the-box multidimensional `cfg["a", "b"]`, `std::println`, and Ranges integration
-> - **1-to-1 API compatibility**: Shares the `tomlkit::` namespace and identical `Item` / `parse` / `findOr` contracts with `tomlkit11`, making future upgrades to C++23 effortless!
+> - **Consistent API**: Shares the `tomlkit::` namespace and identical `Item` / `parse` / `findOr` contracts with `tomlkit11`, so upgrading to C++23 modules later only requires changing `#include <tomlkit11/tomlkit11.hpp>` to `import tomlkitpp;`.
 
-`tomlkit11` is the **zero-dependency C++11 header-only sister library** to [tomlkitpp](https://github.com/julixian/tomlkitpp) (also available as an amalgamated single header `single_include/tomlkit11/tomlkit11.hpp` and an optional compiled-unit mode). It targets **TOML v1.1.0** by default (with `SpecVersion::v1_0` compatibility mode) and preserves comments, blank lines, indentation, quote styles, and integer radices across edits.
+`tomlkit11` is the **zero-dependency C++11 header-only sister library** to [tomlkitpp](https://github.com/julixian/tomlkitpp) (also available as an amalgamated single header `single_include/tomlkit11/tomlkit11.hpp` and an optional compiled target for in-tree CMake builds). It targets **TOML v1.1.0** by default (with `SpecVersion::v1_0` compatibility mode) and preserves comments, blank lines, indentation, quote styles, and integer radices across edits.
 
 ---
 
-## Flagship `tomlkitpp` vs `tomlkit11`
+## Comparison with C++23 Module Version (`tomlkitpp`)
 
-| Feature | **[tomlkitpp](https://github.com/julixian/tomlkitpp) (Flagship)** | **tomlkit11 (This Repo)** |
+| Feature | **[tomlkitpp](https://github.com/julixian/tomlkitpp) (C++23 Native Module)** | **tomlkit11 (This Repo)** |
 | --- | --- | --- |
 | **C++ Baseline** | C++23 (`import std;`) | **C++11+** (progressively unlocks C++14/17/20/23 features) |
-| **Distribution** | C++23 native module (`export module tomlkitpp;`) | Header-only / single-header / optional `TOMLKIT11_COMPILED_LIB` |
+| **Distribution** | C++23 native module (`export module tomlkitpp;`) | Header-only / single-header / optional in-tree `tomlkit11::tomlkit11_compiled` |
 | **Build Systems** | [`mcpp`](https://github.com/mcpp-community/mcpp) | CMake (`FetchContent` / `find_package`), vcpkg, single-header drop-in |
 | **Error Handling** | Exceptions + native `std::expected<T, ParseError>` | Exceptions + `tomlkit::Result<T, ParseError>` (convertible to `std::expected` in C++23) + full `-fno-exceptions` support |
 | **Deep Path Access** | Native C++23 `cfg["a", "b", 0]` | `cfg.find("a", "b", 0)` / `cfg.ensure("a", "b")` in C++11–20; auto-unlocks `cfg["a", "b", 0]` in C++23 |
 | **TOML Spec & Round-Trip** | TOML v1.1.0 / v1.0.0, byte-lossless CST | Identical lexer, parser, and CST-preserving emitter |
 | **Official `toml-test`** | 100% 4-way pass (v1.1.0 & v1.0.0) | 100% 4-way pass (pure C++11 compliance runner) |
 
-### Seamless 1-to-1 Migration to `tomlkitpp`
+### Migration Example (`tomlkit11` → `tomlkitpp`)
 
 When you are ready to adopt C++23 modules, your TOML code requires almost no changes:
 
@@ -144,22 +144,26 @@ Official port manifests are provided under [`packaging/vcpkg/`](./packaging/vcpk
 vcpkg install tomlkit11 --overlay-ports=/path/to/tomlkit11/packaging/vcpkg
 ```
 
-### 5. Compiled Library Speedup (`TOMLKIT11_COMPILED_LIB`)
+### 5. Compiled-Unit Mode (Optional Build Speedup)
 
-By default, `tomlkit11` runs in pure header-only mode. For larger multi-TU projects, you can compile the implementation into a single translation unit to speed up rebuilds and keep platform headers such as `<windows.h>` out of consumer TUs:
+1. **In-tree CMake (`FetchContent` / `add_subdirectory`)**: When multiple `.cpp` translation units include `tomlkit11`, link the built-in static target `tomlkit11::tomlkit11_compiled` instead of creating a manual wrapper file — it compiles `src/tomlkit11.cpp` under your project's own C++ standard and propagates `TOMLKIT11_COMPILED_LIB` automatically:
 
-1. Define `TOMLKIT11_COMPILED_LIB` across all targets (`target_compile_definitions(your_target PRIVATE TOMLKIT11_COMPILED_LIB)`).
-2. Create one dedicated `.cpp` file (`tomlkit11_impl.cpp`) defining `TOMLKIT11_IMPLEMENTATION`:
+   ```cmake
+   target_link_libraries(your_target PRIVATE tomlkit11::tomlkit11_compiled)
+   ```
 
-```cpp
-// tomlkit11_impl.cpp
-#define TOMLKIT11_COMPILED_LIB
-#define TOMLKIT11_IMPLEMENTATION
-#include <tomlkit11/tomlkit11.hpp>
-```
+   > **Note**: Installed packages (`vcpkg` and `cmake --install`) intentionally remain pure header-only (`tomlkit11::tomlkit11`). Precompiling a binary `.lib` under one C++ standard (e.g. C++14) would mismatch symbol mangling for consumers built under another standard (where `tomlkit::StringView`, `tomlkit::Optional`, and `std::filesystem::path` signatures adapt), and MSBuild `.sln` projects integrated via vcpkg do not automatically propagate CMake target compile definitions.
+
+2. **Non-CMake / single-header builds**: Define `TOMLKIT11_COMPILED_LIB` project-wide and include the implementation once in a single `.cpp` file:
+
+   ```cpp
+   #define TOMLKIT11_COMPILED_LIB
+   #define TOMLKIT11_IMPLEMENTATION
+   #include <tomlkit11/tomlkit11.hpp>
+   ```
 
 > [!NOTE]
-> With our flagship C++23 module library [tomlkitpp](https://github.com/julixian/tomlkitpp), precompiled module interfaces (BMIs) give you this build speedup automatically without managing preprocessor macros.
+> The C++23 native module library [tomlkitpp](https://github.com/julixian/tomlkitpp) resolves repeated header parsing natively through module BMIs without needing compiled-unit macros.
 
 ### 6. Exception-Free Builds (`-fno-exceptions`)
 

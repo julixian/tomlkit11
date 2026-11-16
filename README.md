@@ -2,31 +2,31 @@
 
 简体中文 | [English](./README_EN.md)
 
-> [!TIP]
-> **正在使用 C++23？强烈推荐使用旗舰模块版：[tomlkitpp](https://github.com/julixian/tomlkitpp)**
+> [!NOTE]
+> **如果你的项目已采用 C++23：可直接使用 C++23 原生模块版 [tomlkitpp](https://github.com/julixian/tomlkitpp)**
 >
-> 如果你的工程与工具链支持 **C++23 原生模块**（`export module tomlkitpp;` + `import std;`）与 [`mcpp`](https://github.com/mcpp-community/mcpp)，建议直接使用旗舰库 **`tomlkitpp`**：
-> - **零头文件重复解析开销**：彻底告别大型 Header-Only 头文件的预编译与反复解析耗时
-> - **原生 C++23 语言体验**：原生 `std::expected`、开箱即用的多维下标 `cfg["a", "b"]`、配合 `std::println` 与 Ranges 无缝协作
-> - **与 `tomlkit11` 1:1 API 对齐**：共享 `tomlkit::` 命名空间与完全一致的 `Item` / `parse` / `findOr` 语义，老项目今天接入 `tomlkit11`，未来升到 C++23 后只需几行即可无痛切换至 `tomlkitpp`！
+> 当工具链支持 **C++23 原生模块**（`export module tomlkitpp;` + `import std;`）与 [`mcpp`](https://github.com/mcpp-community/mcpp) 时，可以优先考虑 **`tomlkitpp`**：
+> - **原生模块编译模型**：通过 BMI 避免大型头文件在多个翻译单元中的重复预处理与解析开销，也无需配置分离编译宏
+> - **原生 C++23 接口**：内置 `std::expected`、开箱即用的多维下标 `cfg["a", "b"]`、配合 `std::println` 与 Ranges 使用
+> - **API 一致性**：`tomlkit11` 与 `tomlkitpp` 共享 `tomlkit::` 命名空间及相同的 `Item` / `parse` / `findOr` 语义，后续升级到 C++23 模块构建时仅需将 `#include <tomlkit11/tomlkit11.hpp>` 替换为 `import tomlkitpp;`。
 
-`tomlkit11` 是 [tomlkitpp](https://github.com/julixian/tomlkitpp) 的 **C++11 零依赖 Header-Only 姊妹库**（同时提供单头文件 `single_include/tomlkit11/tomlkit11.hpp` 与可选编译单元分离模式），默认支持 **TOML v1.1.0**（并兼容 `SpecVersion::v1_0`），在解析、原位编辑与序列化过程中完整保留原始注释、空行、缩进、引号形态与数字进制。
+`tomlkit11` 是 [tomlkitpp](https://github.com/julixian/tomlkitpp) 的 **C++11 零依赖 Header-Only 姊妹库**（同时提供单头文件 `single_include/tomlkit11/tomlkit11.hpp` 与可选编译库模式），默认支持 **TOML v1.1.0**（并兼容 `SpecVersion::v1_0`），在解析、原位编辑与序列化过程中完整保留原始注释、空行、缩进、引号形态与数字进制。
 
 ---
 
-## 旗舰版 `tomlkitpp` vs 兼容版 `tomlkit11`
+## 与原生模块版 `tomlkitpp` 的对比
 
-| 特性维度 | **[tomlkitpp](https://github.com/julixian/tomlkitpp)（旗舰推荐）** | **tomlkit11（本仓库）** |
+| 特性维度 | **[tomlkitpp](https://github.com/julixian/tomlkitpp)（C++23 原生模块）** | **tomlkit11（本仓库）** |
 | --- | --- | --- |
 | **语言标准要求** | C++23（需支持 `import std;`） | **C++11 起**（自动渐进解锁 C++14/17/20/23 特性） |
-| **分发形态** | C++23 原生模块（`export module tomlkitpp;`） | Header-Only / 单头文件 / 可选 `TOMLKIT11_COMPILED_LIB` 分离编译 |
-| **构建体系** | [`mcpp`](https://github.com/mcpp-community/mcpp) 一键接入 | CMake (`FetchContent` / `find_package`)、vcpkg、单文件直拷 |
+| **分发形态** | C++23 原生模块（`export module tomlkitpp;`） | Header-Only / 单头文件 / 可选 `tomlkit11::tomlkit11_compiled` 静态库目标 |
+| **构建体系** | [`mcpp`](https://github.com/mcpp-community/mcpp) | CMake (`FetchContent` / `find_package`)、vcpkg、单文件直拷 |
 | **错误处理** | 异常 + 原生 `std::expected<T, ParseError>` | 异常 + `tomlkit::Result<T, ParseError>`（C++23 可隐式转 `std::expected`）+ 完整 `-fno-exceptions` 支持 |
 | **多维路径访问** | 原生 C++23 `cfg["a", "b", 0]` | C++11–20 使用 `cfg.find("a", "b", 0)` / `cfg.ensure("a", "b")`；C++23 自动解锁 `cfg["a", "b", 0]` |
-| **TOML 规范与保真** | TOML v1.1.0 / v1.0.0、100% CST 无损往返 | 与 `tomlkitpp` 完全一致的词法/语法/CST 序列化引擎 |
+| **TOML 规范与保真** | TOML v1.1.0 / v1.0.0、100% CST 无损往返 | 与 `tomlkitpp` 一致的词法/语法/CST 序列化引擎 |
 | **官方 `toml-test`** | v1.1.0 & v1.0.0 四向全绿 | v1.1.0 & v1.0.0 四向全绿（纯 C++11 合规运行器） |
 
-### 1:1 无缝迁移至 `tomlkitpp`
+### 迁移至 `tomlkitpp` 示例
 
 当你日后将项目升级到 C++23 模块构建时，业务代码几乎无需改动：
 
@@ -144,22 +144,26 @@ target_link_libraries(your_target PRIVATE tomlkit11::tomlkit11)
 vcpkg install tomlkit11 --overlay-ports=/path/to/tomlkit11/packaging/vcpkg
 ```
 
-### 5. 编译加速模式（`TOMLKIT11_COMPILED_LIB`）
+### 5. 编译加速模式（可选分离编译）
 
-默认 Header-Only 模式下，所有实现以内联方式展开；如果大型项目中有多个 `.cpp` 翻译单元引入 `tomlkit11`，可采用分离编译模式大幅缩短增量编译时间，并避免将 `<windows.h>` 等平台实现头文件带入业务编译单元：
+1. **CMake 同树构建（`FetchContent` / `add_subdirectory`）**：如果多个 `.cpp` 翻译单元引入 `tomlkit11`，可直接链接内置静态库目标 `tomlkit11::tomlkit11_compiled`（内部自动以当前工程同一 C++ 标准编译 `src/tomlkit11.cpp` 并传播 `TOMLKIT11_COMPILED_LIB` 宏），**无需手建实现文件或手动配置宏**：
 
-1. 在全工程所有目标上定义宏 `TOMLKIT11_COMPILED_LIB`（如 `target_compile_definitions(your_target PRIVATE TOMLKIT11_COMPILED_LIB)`）。
-2. 新建一个独立编译单元 `tomlkit11_impl.cpp`，在引入头文件前定义 `TOMLKIT11_IMPLEMENTATION`：
+   ```cmake
+   target_link_libraries(your_target PRIVATE tomlkit11::tomlkit11_compiled)
+   ```
 
-```cpp
-// tomlkit11_impl.cpp
-#define TOMLKIT11_COMPILED_LIB
-#define TOMLKIT11_IMPLEMENTATION
-#include <tomlkit11/tomlkit11.hpp>
-```
+   > **注**：`vcpkg` 与 `cmake --install` 产物有意保持纯 Header-Only（`tomlkit11::tomlkit11`），因为预编译 `.lib` 与不同 C++ 标准（如 C++14 编库 + C++17/20/23 消费端切换 `std::string_view` / `std::optional` / `std::filesystem::path`）混用会产生 ABI 符号不匹配，且 MSBuild `.sln` 工程不会自动传播 CMake 目标宏。
+
+2. **非 CMake / 单头文件项目**：若需自行加速多文件编译，可在全局定义 `TOMLKIT11_COMPILED_LIB`，并在工程内任意一个 `.cpp` 中补充：
+
+   ```cpp
+   #define TOMLKIT11_COMPILED_LIB
+   #define TOMLKIT11_IMPLEMENTATION
+   #include <tomlkit11/tomlkit11.hpp>
+   ```
 
 > [!NOTE]
-> 在采用 C++23 模块的旗舰版 [tomlkitpp](https://github.com/julixian/tomlkitpp) 中，上述头文件切分技巧均已由编译器原生模块 BMI 机制自动解决，无需手动维护编译宏。
+> 在 C++23 原生模块版 [tomlkitpp](https://github.com/julixian/tomlkitpp) 中，头文件重复解析问题已由模块 BMI 机制原生解决，无需配置编译宏。
 
 ### 6. 无异常编译（`-fno-exceptions`）
 

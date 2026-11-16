@@ -43,6 +43,20 @@ function(tomlkit11_apply_common_flags target_name)
     endif()
 endfunction()
 
+if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/src/tomlkit11.cpp")
+    add_library(tomlkit11_compiled STATIC EXCLUDE_FROM_ALL
+        "${CMAKE_CURRENT_SOURCE_DIR}/src/tomlkit11.cpp"
+    )
+    add_library(tomlkit11::tomlkit11_compiled ALIAS tomlkit11_compiled)
+    target_compile_features(tomlkit11_compiled PUBLIC cxx_std_11)
+    target_compile_definitions(tomlkit11_compiled PUBLIC TOMLKIT11_COMPILED_LIB)
+    target_include_directories(tomlkit11_compiled PUBLIC
+        $<BUILD_INTERFACE:${TOMLKIT11_BUILD_INCLUDE_DIR}>
+    )
+    set_target_properties(tomlkit11_compiled PROPERTIES POSITION_INDEPENDENT_CODE ON)
+    tomlkit11_apply_common_flags(tomlkit11_compiled)
+endif()
+
 if(TOMLKIT11_BUILD_TESTS)
     enable_testing()
 
@@ -93,6 +107,14 @@ if(TOMLKIT11_BUILD_TESTS)
         target_compile_definitions(test_compiled_lib PRIVATE TOMLKIT11_COMPILED_LIB)
         tomlkit11_apply_common_flags(test_compiled_lib)
         add_test(NAME test_compiled_lib COMMAND test_compiled_lib)
+    endif()
+
+    set(_compiled_target_src "${CMAKE_CURRENT_SOURCE_DIR}/tests/test_compiled_lib/target_main.cpp")
+    if(TARGET tomlkit11_compiled AND EXISTS "${_compiled_target_src}")
+        add_executable(test_compiled_target "${_compiled_target_src}")
+        target_link_libraries(test_compiled_target PRIVATE tomlkit11::tomlkit11_compiled)
+        tomlkit11_apply_common_flags(test_compiled_target)
+        add_test(NAME test_compiled_target COMMAND test_compiled_target)
     endif()
 endif()
 

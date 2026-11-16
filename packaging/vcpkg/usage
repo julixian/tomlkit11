@@ -1,0 +1,4 @@
+tomlkit11 is header-only and provides the CMake target:
+
+    find_package(tomlkit11 CONFIG REQUIRED)
+    target_link_libraries(main PRIVATE tomlkit11::tomlkit11)

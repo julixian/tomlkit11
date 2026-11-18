@@ -2,6 +2,8 @@
 
 简体中文 | [English](./README_EN.md)
 
+[![Try it on Compiler Explorer](https://img.shields.io/badge/Compiler_Explorer-Try_Online-1f6feb?logo=compilerexplorer&logoColor=white)](https://godbolt.org/z/8PqT131j1)
+
 > [!NOTE]
 > **如果你的项目已采用 C++23：可直接使用 C++23 原生模块版 [tomlkitpp](https://github.com/julixian/tomlkitpp)**
 >
@@ -82,6 +84,22 @@ int main()
 - **通过 [`toml-lang/toml-test`](https://github.com/toml-lang/toml-test) 官方测试集**：
   - **TOML v1.1.0**：Valid `218/218`、Invalid `502/502`、往返一致性 `218/218`、Encoder `218/218`
   - **TOML v1.0.0**：Valid `208/208`、Invalid `509/509`、往返一致性 `208/208`、Encoder `208/208`
+
+---
+
+## 与常见 C++ TOML 库的定位对比
+
+| 维度 | **[tomlkitpp](https://github.com/julixian/tomlkitpp)** | **tomlkit11** | **toml++** (v3.4) | **toml11** (v4.4) |
+| --- | --- | --- | --- | --- |
+| **最低 C++ 标准** | C++23 | **C++11** | C++17 | **C++11** |
+| **分发形态** | **原生 C++23 模块** (`export module`) | Header-only / 单头文件 / 可选静态库 | Header-only / 单头文件 / 可选编译库 | Header-only / 单头文件 / 可选预编译库 |
+| **TOML 规范支持** | **v1.1.0**（默认）& v1.0.0 | **v1.1.0**（默认）& v1.0.0 | v1.0.0 | **v1.1.0** & v1.0.0 |
+| **写回保留注释与空白排版** | **完整保留**（含行内/块内注释、空行、缩进） | **完整保留**（同左） | 不保留（纯 AST，面向只读解析/重新生成） | 部分保留（`preserve_comments` 保留节点关联注释，不保留空行与精确空白） |
+| **保留原始字面量与键顺序** | **原样回放**（`0xff_00`、引号风格、点分键、表顺序） | **原样回放**（同左） | 不保留（`table` 默认按键名字典序排列） | 部分保留（`ordered_value` 保序并记录进制/引号枚举，不保留数值下划线等原始文本） |
+| **节点类型模型** | 单一 `tomlkit::Item`（原生 `doc["a", "b", 0]`） | 单一 `tomlkit::Item`（C++23 下同样支持多维下标） | `toml::node` 多态派生体系 | 模板化 `toml::basic_value<Config>` |
+| **无异常接口 / `-fno-exceptions`** | `std::expected` 接口（`tryParse` / `tryGet`） | **完整支持** `Result<T, E>` 与 `-fno-exceptions` / `/EHs-c-` | **完整支持**（`TOML_EXCEPTIONS=0`） | 提供 `try_parse`，不支持关闭异常编译 |
+
+> **选型参考**：如果只需要解析读取配置、不需要把修改写回原文件，`toml++` 等纯 AST 库非常轻量成熟；如果需要像 Rust `toml_edit` / Python `tomlkit` 那样**在不破坏用户手写注释和排版的前提下程序化增删改配置**，可按项目 C++ 标准选择 `tomlkitpp`（C++23 模块）或 `tomlkit11`（C++11 起）。
 
 ---
 
